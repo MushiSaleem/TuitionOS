@@ -10,6 +10,9 @@ import {
 import { useTuition } from '@/src/context/TuitionContext';
 import { SUBSCRIPTION_PLANS, SubscriptionTier } from '@/src/types/tuition';
 import { formatLkrCompact, normalizeSriLankanPhone, validateSriLankanPhone } from '@/src/utils/sriLanka';
+import heroAcademyImg from '@/src/assets/images/hero_tuition_academy_1794594687520.jpg';
+import counterCheckinImg from '@/src/assets/images/feature_counter_checkin_1794594688420.jpg';
+import lecturerAvatarImg from '@/src/assets/images/avatar_lecturer_sample_1794594688408.jpg';
 
 interface LandingPageProps {
   onNavigateLogin: () => void;
@@ -163,7 +166,7 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
             <div className="relative h-full min-h-[300px] rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
               {!heroImgError ? (
                 <img
-                  src="/src/assets/images/hero_tuition_academy_1794594687520.jpg"
+                  src={heroAcademyImg}
                   alt="Modern lecture hall at a Colombo tuition academy"
                   referrerPolicy="no-referrer"
                   onError={() => setHeroImgError(true)}
@@ -245,7 +248,7 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
               <div className="md:col-span-5 bg-slate-100 min-h-[220px]">
                 {!counterImgError ? (
                   <img
-                    src="/src/assets/images/feature_counter_checkin_1794594688420.jpg"
+                    src={counterCheckinImg}
                     alt="Front-desk QR student check-in counter"
                     referrerPolicy="no-referrer"
                     onError={() => setCounterImgError(true)}
@@ -275,7 +278,7 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
                 <div className="flex items-center gap-3 min-w-0">
                   {!avatarImgError ? (
                     <img
-                      src="/src/assets/images/avatar_lecturer_sample_1794594688408.jpg"
+                      src={lecturerAvatarImg}
                       alt="Dr. Kasun Jayawardena"
                       referrerPolicy="no-referrer"
                       onError={() => setAvatarImgError(true)}
