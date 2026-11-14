@@ -1,0 +1,699 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Safety Net (Default-Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Global Hardened Primitives
+    // -------------------------------------------------------------------------
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isSuperAdmin() {
+      return isVerified() && (
+        request.auth.token.email == 'apekollek@gmail.com' ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'super_admin' &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active'
+        )
+      );
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function hasActiveUserProfile() {
+      return isVerified() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        userDoc().status == 'active';
+    }
+
+    function isTenantMember(instituteId) {
+      return hasActiveUserProfile() && userDoc().instituteId == instituteId;
+    }
+
+    function isTenantAdmin(instituteId) {
+      return isTenantMember(instituteId) && userDoc().role == 'institute_admin';
+    }
+
+    function isTenantStaff(instituteId) {
+      return isTenantMember(instituteId) && userDoc().role in ['institute_admin', 'receptionist', 'lecturer'];
+    }
+
+    function isTenantCounterOrAdmin(instituteId) {
+      return isTenantMember(instituteId) && userDoc().role in ['institute_admin', 'receptionist'];
+    }
+
+    function isActiveInstitute(instituteId) {
+      return exists(/databases/$(database)/documents/institutes/$(instituteId)) &&
+        get(/databases/$(database)/documents/institutes/$(instituteId)).data.status == 'active';
+    }
+
+    // -------------------------------------------------------------------------
+    // Entity Validation Blueprints (No existing() or diff() inside helpers)
+    // -------------------------------------------------------------------------
+    function isValidUserProfile(data, uid) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'instituteId', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'instituteId', 'linkedEntityId', 'status', 'createdAt', 'updatedAt']) &&
+        isValidId(data.uid) && data.uid == uid &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+        data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 100 &&
+        data.role in ['super_admin', 'institute_admin', 'receptionist', 'lecturer', 'student'] &&
+        isValidId(data.instituteId) &&
+        (!('linkedEntityId' in data) || (data.linkedEntityId is string && data.linkedEntityId.size() <= 128)) &&
+        data.status in ['active', 'suspended'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidInstitute(data, instituteId) {
+      return data.keys().hasAll(['instituteId', 'name', 'city', 'district', 'phone', 'email', 'ownerUid', 'ownerName', 'status', 'subscriptionTier', 'monthlyFeeLkr', 'billingStatus', 'activeStudentCount', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['instituteId', 'name', 'city', 'district', 'address', 'phone', 'email', 'ownerUid', 'ownerName', 'status', 'subscriptionTier', 'monthlyFeeLkr', 'billingStatus', 'activeStudentCount', 'createdAt', 'updatedAt']) &&
+        isValidId(data.instituteId) && data.instituteId == instituteId &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 120 &&
+        data.city is string && data.city.size() >= 2 && data.city.size() <= 60 &&
+        data.district is string && data.district.size() >= 2 && data.district.size() <= 60 &&
+        (!('address' in data) || (data.address is string && data.address.size() <= 200)) &&
+        data.phone is string && data.phone.size() >= 9 && data.phone.size() <= 20 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+        isValidId(data.ownerUid) &&
+        data.ownerName is string && data.ownerName.size() >= 2 && data.ownerName.size() <= 100 &&
+        data.status in ['active', 'pending', 'suspended'] &&
+        data.subscriptionTier in ['starter', 'pro', 'enterprise'] &&
+        data.monthlyFeeLkr is number && data.monthlyFeeLkr >= 0 &&
+        data.billingStatus in ['paid', 'pending', 'overdue'] &&
+        data.activeStudentCount is number && data.activeStudentCount >= 0 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidOnboardingRequest(data, requestId) {
+      return data.keys().hasAll(['requestId', 'instituteName', 'city', 'ownerName', 'email', 'phone', 'estimatedStudents', 'preferredTier', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['requestId', 'instituteName', 'city', 'ownerName', 'email', 'phone', 'estimatedStudents', 'preferredTier', 'notes', 'status', 'createdAt']) &&
+        isValidId(data.requestId) && data.requestId == requestId &&
+        data.instituteName is string && data.instituteName.size() >= 2 && data.instituteName.size() <= 120 &&
+        data.city is string && data.city.size() >= 2 && data.city.size() <= 60 &&
+        data.ownerName is string && data.ownerName.size() >= 2 && data.ownerName.size() <= 100 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+        data.phone is string && data.phone.size() >= 9 && data.phone.size() <= 20 &&
+        data.estimatedStudents is number && data.estimatedStudents >= 1 && data.estimatedStudents <= 50000 &&
+        data.preferredTier in ['starter', 'pro', 'enterprise'] &&
+        (!('notes' in data) || (data.notes is string && data.notes.size() <= 500)) &&
+        data.status in ['pending', 'approved', 'rejected'] &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidAuditLog(data, logId) {
+      return data.keys().hasAll(['logId', 'actorUid', 'actorEmail', 'action', 'targetType', 'targetId', 'summary', 'createdAt']) &&
+        data.keys().hasOnly(['logId', 'actorUid', 'actorEmail', 'action', 'targetType', 'targetId', 'summary', 'createdAt']) &&
+        isValidId(data.logId) && data.logId == logId &&
+        isValidId(data.actorUid) && data.actorUid == request.auth.uid &&
+        data.actorEmail is string && data.actorEmail.size() >= 3 && data.actorEmail.size() <= 120 &&
+        data.action is string && data.action.size() >= 2 && data.action.size() <= 80 &&
+        data.targetType in ['institute', 'onboarding', 'billing', 'system'] &&
+        data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128 &&
+        data.summary is string && data.summary.size() >= 2 && data.summary.size() <= 300 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidStaffMember(data, instituteId, staffId) {
+      return data.keys().hasAll(['staffId', 'instituteId', 'fullName', 'email', 'phone', 'nic', 'role', 'defaultSharePct', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['staffId', 'instituteId', 'uid', 'fullName', 'email', 'phone', 'nic', 'role', 'subjectSpecialty', 'defaultSharePct', 'status', 'createdAt', 'updatedAt']) &&
+        isValidId(data.staffId) && data.staffId == staffId &&
+        isValidId(data.instituteId) && data.instituteId == instituteId &&
+        (!('uid' in data) || (data.uid is string && data.uid.size() <= 128)) &&
+        data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+        data.phone is string && data.phone.size() >= 9 && data.phone.size() <= 20 &&
+        data.nic is string && data.nic.size() >= 10 && data.nic.size() <= 12 &&
+        data.role in ['institute_admin', 'receptionist', 'lecturer'] &&
+        (!('subjectSpecialty' in data) || (data.subjectSpecialty is string && data.subjectSpecialty.size() <= 80)) &&
+        data.defaultSharePct is number && data.defaultSharePct >= 0 && data.defaultSharePct <= 100 &&
+        data.status in ['active', 'inactive'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTuitionClass(data, instituteId, classId) {
+      return data.keys().hasAll(['classId', 'instituteId', 'title', 'subject', 'grade', 'stream', 'medium', 'classType', 'lecturerId', 'lecturerName', 'lecturerSharePct', 'monthlyFeeLkr', 'admissionFeeLkr', 'hallName', 'scheduleDay', 'scheduleTime', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['classId', 'instituteId', 'title', 'subject', 'grade', 'stream', 'medium', 'classType', 'lecturerId', 'lecturerName', 'lecturerSharePct', 'monthlyFeeLkr', 'admissionFeeLkr', 'hallName', 'scheduleDay', 'scheduleTime', 'status', 'createdAt', 'updatedAt']) &&
+        isValidId(data.classId) && data.classId == classId &&
+        isValidId(data.instituteId) && data.instituteId == instituteId &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+        data.subject is string && data.subject.size() >= 2 && data.subject.size() <= 60 &&
+        data.grade is string && data.grade.size() >= 2 && data.grade.size() <= 30 &&
+        data.stream is string && data.stream.size() >= 2 && data.stream.size() <= 40 &&
+        data.medium in ['Sinhala', 'English', 'Tamil'] &&
+        data.classType in ['Theory', 'Revision', 'Paper Class'] &&
+        isValidId(data.lecturerId) &&
+        data.lecturerName is string && data.lecturerName.size() >= 2 && data.lecturerName.size() <= 100 &&
+        data.lecturerSharePct is number && data.lecturerSharePct >= 0 && data.lecturerSharePct <= 100 &&
+        data.monthlyFeeLkr is number && data.monthlyFeeLkr >= 0 &&
+        data.admissionFeeLkr is number && data.admissionFeeLkr >= 0 &&
+        data.hallName is string && data.hallName.size() >= 1 && data.hallName.size() <= 60 &&
+        data.scheduleDay is string && data.scheduleDay.size() >= 3 && data.scheduleDay.size() <= 20 &&
+        data.scheduleTime is string && data.scheduleTime.size() >= 3 && data.scheduleTime.size() <= 30 &&
+        data.status in ['active', 'archived'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidClassBatch(data, instituteId, batchId) {
+      return data.keys().hasAll(['batchId', 'instituteId', 'classId', 'className', 'batchCode', 'academicYear', 'hallName', 'dayOfWeek', 'startTime', 'endTime', 'capacity', 'enrolledCount', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['batchId', 'instituteId', 'classId', 'className', 'batchCode', 'academicYear', 'hallName', 'dayOfWeek', 'startTime', 'endTime', 'capacity', 'enrolledCount', 'status', 'createdAt', 'updatedAt']) &&
+        isValidId(data.batchId) && data.batchId == batchId &&
+        isValidId(data.instituteId) && data.instituteId == instituteId &&
+        isValidId(data.classId) &&
+        data.className is string && data.className.size() >= 2 && data.className.size() <= 120 &&
+        data.batchCode is string && data.batchCode.size() >= 2 && data.batchCode.size() <= 30 &&
+        data.academicYear is string && data.academicYear.size() >= 4 && data.academicYear.size() <= 10 &&
+        data.hallName is string && data.hallName.size() >= 1 && data.hallName.size() <= 60 &&
+        data.dayOfWeek is string && data.dayOfWeek.size() >= 3 && data.dayOfWeek.size() <= 20 &&
+        data.startTime is string && data.startTime.size() >= 3 && data.startTime.size() <= 20 &&
+        data.endTime is string && data.endTime.size() >= 3 && data.endTime.size() <= 20 &&
+        data.capacity is number && data.capacity >= 1 && data.capacity <= 5000 &&
+        data.enrolledCount is number && data.enrolledCount >= 0 && data.enrolledCount <= 5000 &&
+        data.status in ['active', 'full', 'archived'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidStudent(data, instituteId, studentId) {
+      return data.keys().hasAll(['studentId', 'instituteId', 'studentCode', 'fullName', 'phone', 'parentPhone', 'grade', 'stream', 'medium', 'enrolledClassIds', 'cardTier', 'admissionPaid', 'portalPin', 'status', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['studentId', 'instituteId', 'studentCode', 'fullName', 'nic', 'phone', 'parentName', 'parentPhone', 'school', 'grade', 'stream', 'medium', 'enrolledClassIds', 'cardTier', 'admissionPaid', 'portalPin', 'status', 'createdAt', 'updatedAt']) &&
+        isValidId(data.studentId) && data.studentId == studentId &&
+        isValidId(data.instituteId) && data.instituteId == instituteId &&
+        data.studentCode is string && data.studentCode.size() <= 24 && data.studentCode.matches('^STU-[0-9]{4}-[0-9]{4}$') &&
+        data.fullName is string && data.fullName.size() >= 2 && data.fullName.size() <= 100 &&
+        (!('nic' in data) || (data.nic is string && data.nic.size() <= 12)) &&
+        data.phone is string && data.phone.size() >= 9 && data.phone.size() <= 20 &&
+        (!('parentName' in data) || (data.parentName is string && data.parentName.size() <= 100)) &&
+        data.parentPhone is string && data.parentPhone.size() >= 9 && data.parentPhone.size() <= 20 &&
+        (!('school' in data) || (data.school is string && data.school.size() <= 100)) &&
+        data.grade is string && data.grade.size() >= 2 && data.grade.size() <= 30 &&
+        data.stream is string && data.stream.size() >= 2 && data.stream.size() <= 40 &&
+        data.medium in ['Sinhala', 'English', 'Tamil'] &&
+        data.enrolledClassIds is list && data.enrolledClassIds.size() <= 15 &&
+        (data.enrolledClassIds.size() == 0 || data.enrolledClassIds[0] is string) &&
+        data.cardTier in ['full', 'half', 'free'] &&
+        data.admissionPaid is bool &&
+        data.portalPin is string && data.portalPin.size() >= 4 && data.portalPin.size() <= 8 &&
+        data.status in ['active', 'inactive'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidFeePayment(data, instituteId, paymentId) {
+      return data.keys().hasAll(['paymentId', 'instituteId', 'receiptNo', 'studentId', 'studentCode', 'studentName', 'classId', 'className', 'lecturerId', 'lecturerName', 'monthKey', 'monthLabel', 'cardTier', 'amountLkr', 'lecturerShareLkr', 'instituteShareLkr', 'paymentMethod', 'collectedByUid', 'collectedByName', 'createdAt']) &&
+        data.keys().hasOnly(['paymentId', 'instituteId', 'receiptNo', 'studentId', 'studentCode', 'studentName', 'classId', 'className', 'lecturerId', 'lecturerName', 'monthKey', 'monthLabel', 'cardTier', 'amountLkr', 'lecturerShareLkr', 'instituteShareLkr', 'paymentMethod', 'collectedByUid', 'collectedByName', 'createdAt']) &&
+        isValidId(data.paymentId) && data.paymentId == paymentId &&
+        isValidId(data.instituteId) && data.instituteId == instituteId &&
+        data.receiptNo is string && data.receiptNo.size() >= 4 && data.receiptNo.size() <= 40 &&
+        isValidId(data.studentId) &&
+        data.studentCode is string && data.studentCode.size() <= 24 &&
+        data.studentName is string && data.studentName.size() >= 2 && data.studentName.size() <= 100 &&
+        isValidId(data.classId) &&
+        data.className is string && data.className.size() >= 2 && data.className.size() <= 120 &&
+        isValidId(data.lecturerId) &&
+        data.lecturerName is string && data.lecturerName.size() >= 2 && data.lecturerName.size() <= 100 &&
+        data.monthKey is string && data.monthKey.size() <= 12 && data.monthKey.matches('^([0-9]{4}-[0-9]{2}|ADMISSION)$') &&
+        data.monthLabel is string && data.monthLabel.size() >= 3 && data.monthLabel.size() <= 30 &&
+        data.cardTier in ['full', 'half', 'free', 'admission'] &&
+        data.amountLkr is number && data.amountLkr >= 0 &&
+        data.lecturerShareLkr is number && data.lecturerShareLkr >= 0 &&
+        data.instituteShareLkr is number && data.instituteShareLkr >= 0 &&
+        (data.lecturerShareLkr + data.instituteShareLkr <= data.amountLkr + 1) &&
+        data.paymentMethod in ['cash', 'card', 'bank_transfer'] &&
+        isValidId(data.collectedByUid) && data.collectedByUid == request.auth.uid &&
+        data.collectedByName is string && data.collectedByName.size() >= 2 && data.collectedByName.size() <= 100 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidAttendanceRecord(data, instituteId, attendanceId) {
+      return data.keys().hasAll(['attendanceId', 'instituteId', 'studentId', 'studentCode', 'studentName', 'classId', 'className', 'dateKey', 'monthKey', 'feeStatus', 'arrearsLkr', 'checkedInByUid', 'createdAt']) &&
+        data.keys().hasOnly(['attendanceId', 'instituteId', 'studentId', 'studentCode', 'studentName', 'classId', 'className', 'dateKey', 'monthKey', 'feeStatus', 'arrearsLkr', 'checkedInByUid', 'createdAt']) &&
+        isValidId(data.attendanceId) && data.attendanceId == attendanceId &&
+        isValidId(data.instituteId) && data.instituteId == instituteId &&
+        isValidId(data.studentId) &&
+        data.studentCode is string && data.studentCode.size() <= 24 &&
+        data.studentName is string && data.studentName.size() >= 2 && data.studentName.size() <= 100 &&
+        isValidId(data.classId) &&
+        data.className is string && data.className.size() >= 2 && data.className.size() <= 120 &&
+        data.dateKey is string && data.dateKey.size() == 10 &&
+        data.monthKey is string && data.monthKey.size() == 7 &&
+        data.feeStatus in ['paid', 'overdue', 'half_card', 'free_card'] &&
+        data.arrearsLkr is number && data.arrearsLkr >= 0 &&
+        isValidId(data.checkedInByUid) && data.checkedInByUid == request.auth.uid &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidExam(data, instituteId, examId) {
+      return data.keys().hasAll(['examId', 'instituteId', 'title', 'classId', 'className', 'lecturerId', 'examDate', 'maxMarks', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['examId', 'instituteId', 'title', 'classId', 'className', 'lecturerId', 'examDate', 'maxMarks', 'createdAt', 'updatedAt']) &&
+        isValidId(data.examId) && data.examId == examId &&
+        isValidId(data.instituteId) && data.instituteId == instituteId &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+        isValidId(data.classId) &&
+        data.className is string && data.className.size() >= 2 && data.className.size() <= 120 &&
+        isValidId(data.lecturerId) &&
+        data.examDate is string && data.examDate.size() == 10 &&
+        data.maxMarks is number && data.maxMarks >= 1 && data.maxMarks <= 1000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidExamMark(data, instituteId, markId) {
+      return data.keys().hasAll(['markId', 'instituteId', 'examId', 'examTitle', 'classId', 'studentId', 'studentCode', 'studentName', 'marksObtained', 'maxMarks', 'grade', 'enteredByUid', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['markId', 'instituteId', 'examId', 'examTitle', 'classId', 'studentId', 'studentCode', 'studentName', 'marksObtained', 'maxMarks', 'grade', 'enteredByUid', 'createdAt', 'updatedAt']) &&
+        isValidId(data.markId) && data.markId == markId &&
+        isValidId(data.instituteId) && data.instituteId == instituteId &&
+        isValidId(data.examId) &&
+        data.examTitle is string && data.examTitle.size() >= 2 && data.examTitle.size() <= 120 &&
+        isValidId(data.classId) &&
+        isValidId(data.studentId) &&
+        data.studentCode is string && data.studentCode.size() <= 24 &&
+        data.studentName is string && data.studentName.size() >= 2 && data.studentName.size() <= 100 &&
+        data.marksObtained is number && data.marksObtained >= 0 && data.marksObtained <= data.maxMarks &&
+        data.maxMarks is number && data.maxMarks >= 1 && data.maxMarks <= 1000 &&
+        data.grade in ['A', 'B', 'C', 'S', 'W'] &&
+        isValidId(data.enteredByUid) && data.enteredByUid == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidStudyMaterial(data, instituteId, materialId) {
+      return data.keys().hasAll(['materialId', 'instituteId', 'classId', 'className', 'lecturerId', 'lecturerName', 'title', 'materialType', 'url', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['materialId', 'instituteId', 'classId', 'className', 'lecturerId', 'lecturerName', 'title', 'description', 'materialType', 'url', 'createdAt', 'updatedAt']) &&
+        isValidId(data.materialId) && data.materialId == materialId &&
+        isValidId(data.instituteId) && data.instituteId == instituteId &&
+        isValidId(data.classId) &&
+        data.className is string && data.className.size() >= 2 && data.className.size() <= 120 &&
+        isValidId(data.lecturerId) &&
+        data.lecturerName is string && data.lecturerName.size() >= 2 && data.lecturerName.size() <= 100 &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 120 &&
+        (!('description' in data) || (data.description is string && data.description.size() <= 400)) &&
+        data.materialType in ['PDF Notes', 'Past Paper', 'Tute', 'Video Link'] &&
+        data.url is string && data.url.size() >= 4 && data.url.size() <= 500 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidInvite(data, inviteEmail) {
+      return data.keys().hasAll(['inviteEmail', 'role', 'instituteId', 'displayName', 'status', 'createdByUid', 'createdAt']) &&
+        data.keys().hasOnly(['inviteEmail', 'role', 'instituteId', 'linkedEntityId', 'displayName', 'status', 'createdByUid', 'createdAt']) &&
+        data.inviteEmail is string && data.inviteEmail.size() >= 3 && data.inviteEmail.size() <= 120 &&
+        data.inviteEmail == inviteEmail &&
+        data.role in ['institute_admin', 'receptionist', 'lecturer', 'student'] &&
+        isValidId(data.instituteId) &&
+        (!('linkedEntityId' in data) || (data.linkedEntityId is string && data.linkedEntityId.size() <= 128)) &&
+        data.displayName is string && data.displayName.size() >= 2 && data.displayName.size() <= 100 &&
+        data.status in ['pending', 'accepted'] &&
+        isValidId(data.createdByUid) && data.createdByUid == request.auth.uid &&
+        data.createdAt is timestamp;
+    }
+
+    // -------------------------------------------------------------------------
+    // Collection Rules
+    // -------------------------------------------------------------------------
+
+    // Pre-authorized Tenant Invites (keyed by lowercase email)
+    match /invites/{inviteEmail} {
+      allow get: if isVerified() && (
+        isSuperAdmin() ||
+        request.auth.token.email.lower() == inviteEmail ||
+        isTenantAdmin(existing().instituteId)
+      );
+      allow list: if isVerified() && (
+        isSuperAdmin() ||
+        (hasActiveUserProfile() && existing().instituteId == userDoc().instituteId && userDoc().role == 'institute_admin')
+      );
+      allow create: if isVerified() &&
+        inviteEmail is string && inviteEmail.size() >= 3 && inviteEmail.size() <= 120 &&
+        isValidInvite(incoming(), inviteEmail) &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time &&
+        (
+          isSuperAdmin() ||
+          (
+            isTenantAdmin(incoming().instituteId) &&
+            incoming().role in ['receptionist', 'lecturer', 'student']
+          )
+        );
+      allow update: if isVerified() &&
+        isValidInvite(incoming(), inviteEmail) &&
+        incoming().inviteEmail == existing().inviteEmail &&
+        incoming().role == existing().role &&
+        incoming().instituteId == existing().instituteId &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          isSuperAdmin() ||
+          (
+            request.auth.token.email.lower() == inviteEmail &&
+            incoming().status == 'accepted' &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['status'])
+          )
+        );
+      allow delete: if isVerified() && (isSuperAdmin() || isTenantAdmin(existing().instituteId));
+    }
+
+    // Users collection (PII & Role Authority)
+    match /users/{uid} {
+      allow get: if isValidId(uid) && isVerified() && (isOwner(uid) || isSuperAdmin());
+      allow list: if isSuperAdmin();
+      allow create: if isValidId(uid) && isVerified() &&
+        isValidUserProfile(incoming(), uid) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (
+          isSuperAdmin() ||
+          (
+            isOwner(uid) &&
+            incoming().role == 'super_admin' &&
+            request.auth.token.email == 'apekollek@gmail.com' &&
+            incoming().status == 'active'
+          ) ||
+          (
+            isOwner(uid) &&
+            incoming().status == 'active' &&
+            exists(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())) &&
+            get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())).data.status == 'pending' &&
+            get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())).data.role == incoming().role &&
+            get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())).data.instituteId == incoming().instituteId
+          )
+        );
+      allow update: if isValidId(uid) && isVerified() &&
+        isValidUserProfile(incoming(), uid) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isSuperAdmin() ||
+          (
+            isOwner(uid) &&
+            incoming().role == existing().role &&
+            incoming().instituteId == existing().instituteId &&
+            incoming().status == existing().status &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(uid) && isSuperAdmin();
+    }
+
+    // Public Institute Onboarding Requests
+    match /onboardingRequests/{requestId} {
+      allow get, list: if isSuperAdmin();
+      allow create: if isValidId(requestId) &&
+        isValidOnboardingRequest(incoming(), requestId) &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time;
+      allow update: if isValidId(requestId) && isSuperAdmin() &&
+        isValidOnboardingRequest(incoming(), requestId) &&
+        incoming().requestId == existing().requestId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'notes']);
+      allow delete: if isValidId(requestId) && isSuperAdmin();
+    }
+
+    // Platform Audit Logs (Super Admin only, append-only)
+    match /auditLogs/{logId} {
+      allow get, list: if isSuperAdmin();
+      allow create: if isValidId(logId) && isSuperAdmin() &&
+        isValidAuditLog(incoming(), logId) &&
+        incoming().createdAt == request.time;
+      allow update, delete: if false;
+    }
+
+    // Multi-Tenant Institutes Root
+    match /institutes/{instituteId} {
+      allow get: if isValidId(instituteId) && (isSuperAdmin() || isTenantMember(instituteId));
+      allow list: if isSuperAdmin();
+      allow create: if isValidId(instituteId) && isSuperAdmin() &&
+        isValidInstitute(incoming(), instituteId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isValidId(instituteId) &&
+        isValidInstitute(incoming(), instituteId) &&
+        incoming().instituteId == existing().instituteId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (
+          isSuperAdmin() ||
+          (
+            isTenantAdmin(instituteId) &&
+            incoming().status == existing().status &&
+            incoming().subscriptionTier == existing().subscriptionTier &&
+            incoming().monthlyFeeLkr == existing().monthlyFeeLkr &&
+            incoming().billingStatus == existing().billingStatus &&
+            incoming().ownerUid == existing().ownerUid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'city', 'district', 'address', 'phone', 'email', 'activeStudentCount', 'updatedAt'])
+          )
+        );
+      allow delete: if isValidId(instituteId) && isSuperAdmin();
+
+      // Subcollection: Staff
+      match /staff/{staffId} {
+        allow get: if isValidId(instituteId) && isValidId(staffId) && (isSuperAdmin() || isTenantStaff(instituteId));
+        allow list: if isVerified() && existing().instituteId == instituteId && (isSuperAdmin() || isTenantStaff(instituteId));
+        allow create: if isValidId(instituteId) && isValidId(staffId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantAdmin(instituteId)) &&
+          isValidStaffMember(incoming(), instituteId, staffId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isValidId(instituteId) && isValidId(staffId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantAdmin(instituteId)) &&
+          isValidStaffMember(incoming(), instituteId, staffId) &&
+          incoming().instituteId == existing().instituteId &&
+          incoming().staffId == existing().staffId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'email', 'phone', 'nic', 'role', 'subjectSpecialty', 'defaultSharePct', 'status', 'uid', 'updatedAt']);
+        allow delete: if isValidId(instituteId) && isValidId(staffId) && (isSuperAdmin() || isTenantAdmin(instituteId));
+      }
+
+      // Subcollection: Tuition Classes
+      match /classes/{classId} {
+        allow get: if isValidId(instituteId) && isValidId(classId) && (isSuperAdmin() || isTenantMember(instituteId));
+        allow list: if isVerified() && existing().instituteId == instituteId && (isSuperAdmin() || isTenantMember(instituteId));
+        allow create: if isValidId(instituteId) && isValidId(classId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantAdmin(instituteId)) &&
+          isValidTuitionClass(incoming(), instituteId, classId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isValidId(instituteId) && isValidId(classId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantAdmin(instituteId)) &&
+          isValidTuitionClass(incoming(), instituteId, classId) &&
+          incoming().instituteId == existing().instituteId &&
+          incoming().classId == existing().classId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'subject', 'grade', 'stream', 'medium', 'classType', 'lecturerId', 'lecturerName', 'lecturerSharePct', 'monthlyFeeLkr', 'admissionFeeLkr', 'hallName', 'scheduleDay', 'scheduleTime', 'status', 'updatedAt']);
+        allow delete: if isValidId(instituteId) && isValidId(classId) && (isSuperAdmin() || isTenantAdmin(instituteId));
+      }
+
+      // Subcollection: Batches
+      match /batches/{batchId} {
+        allow get: if isValidId(instituteId) && isValidId(batchId) && (isSuperAdmin() || isTenantMember(instituteId));
+        allow list: if isVerified() && existing().instituteId == instituteId && (isSuperAdmin() || isTenantMember(instituteId));
+        allow create: if isValidId(instituteId) && isValidId(batchId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantAdmin(instituteId)) &&
+          isValidClassBatch(incoming(), instituteId, batchId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isValidId(instituteId) && isValidId(batchId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantCounterOrAdmin(instituteId)) &&
+          isValidClassBatch(incoming(), instituteId, batchId) &&
+          incoming().instituteId == existing().instituteId &&
+          incoming().batchId == existing().batchId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          (
+            isSuperAdmin() ||
+            isTenantAdmin(instituteId) ||
+            incoming().diff(existing()).affectedKeys().hasOnly(['enrolledCount', 'status', 'updatedAt'])
+          );
+        allow delete: if isValidId(instituteId) && isValidId(batchId) && (isSuperAdmin() || isTenantAdmin(instituteId));
+      }
+
+      // Subcollection: Students
+      match /students/{studentId} {
+        allow get: if isValidId(instituteId) && isValidId(studentId) && (
+          isSuperAdmin() ||
+          isTenantStaff(instituteId) ||
+          (isTenantMember(instituteId) && userDoc().linkedEntityId == studentId)
+        );
+        allow list: if isVerified() && existing().instituteId == instituteId && (
+          isSuperAdmin() ||
+          isTenantStaff(instituteId) ||
+          (isTenantMember(instituteId) && existing().studentId == userDoc().linkedEntityId)
+        );
+        allow create: if isValidId(instituteId) && isValidId(studentId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantCounterOrAdmin(instituteId)) &&
+          isValidStudent(incoming(), instituteId, studentId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isValidId(instituteId) && isValidId(studentId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantCounterOrAdmin(instituteId)) &&
+          isValidStudent(incoming(), instituteId, studentId) &&
+          incoming().instituteId == existing().instituteId &&
+          incoming().studentId == existing().studentId &&
+          incoming().studentCode == existing().studentCode &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['fullName', 'nic', 'phone', 'parentName', 'parentPhone', 'school', 'grade', 'stream', 'medium', 'enrolledClassIds', 'cardTier', 'admissionPaid', 'portalPin', 'status', 'updatedAt']);
+        allow delete: if isValidId(instituteId) && isValidId(studentId) && (isSuperAdmin() || isTenantAdmin(instituteId));
+      }
+
+      // Subcollection: Fee Payments (Immutable Ledger)
+      match /feePayments/{paymentId} {
+        allow get: if isValidId(instituteId) && isValidId(paymentId) && (
+          isSuperAdmin() ||
+          isTenantStaff(instituteId) ||
+          (isTenantMember(instituteId) && existing().studentId == userDoc().linkedEntityId)
+        );
+        allow list: if isVerified() && existing().instituteId == instituteId && (
+          isSuperAdmin() ||
+          isTenantStaff(instituteId) ||
+          (isTenantMember(instituteId) && existing().studentId == userDoc().linkedEntityId)
+        );
+        allow create: if isValidId(instituteId) && isValidId(paymentId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantCounterOrAdmin(instituteId)) &&
+          isValidFeePayment(incoming(), instituteId, paymentId) &&
+          incoming().createdAt == request.time;
+        allow update, delete: if false;
+      }
+
+      // Subcollection: Attendance Records (Append-Only Check-Ins)
+      match /attendance/{attendanceId} {
+        allow get: if isValidId(instituteId) && isValidId(attendanceId) && (
+          isSuperAdmin() ||
+          isTenantStaff(instituteId) ||
+          (isTenantMember(instituteId) && existing().studentId == userDoc().linkedEntityId)
+        );
+        allow list: if isVerified() && existing().instituteId == instituteId && (
+          isSuperAdmin() ||
+          isTenantStaff(instituteId) ||
+          (isTenantMember(instituteId) && existing().studentId == userDoc().linkedEntityId)
+        );
+        allow create: if isValidId(instituteId) && isValidId(attendanceId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantStaff(instituteId)) &&
+          isValidAttendanceRecord(incoming(), instituteId, attendanceId) &&
+          incoming().createdAt == request.time;
+        allow update, delete: if false;
+      }
+
+      // Subcollection: Exams
+      match /exams/{examId} {
+        allow get: if isValidId(instituteId) && isValidId(examId) && (isSuperAdmin() || isTenantMember(instituteId));
+        allow list: if isVerified() && existing().instituteId == instituteId && (isSuperAdmin() || isTenantMember(instituteId));
+        allow create: if isValidId(instituteId) && isValidId(examId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantStaff(instituteId)) &&
+          isValidExam(incoming(), instituteId, examId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isValidId(instituteId) && isValidId(examId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantStaff(instituteId)) &&
+          isValidExam(incoming(), instituteId, examId) &&
+          incoming().instituteId == existing().instituteId &&
+          incoming().examId == existing().examId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'examDate', 'maxMarks', 'updatedAt']);
+        allow delete: if isValidId(instituteId) && isValidId(examId) && (isSuperAdmin() || isTenantAdmin(instituteId));
+      }
+
+      // Subcollection: Exam Marks
+      match /examMarks/{markId} {
+        allow get: if isValidId(instituteId) && isValidId(markId) && (
+          isSuperAdmin() ||
+          isTenantStaff(instituteId) ||
+          (isTenantMember(instituteId) && existing().studentId == userDoc().linkedEntityId)
+        );
+        allow list: if isVerified() && existing().instituteId == instituteId && (
+          isSuperAdmin() ||
+          isTenantStaff(instituteId) ||
+          (isTenantMember(instituteId) && existing().studentId == userDoc().linkedEntityId)
+        );
+        allow create: if isValidId(instituteId) && isValidId(markId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantStaff(instituteId)) &&
+          isValidExamMark(incoming(), instituteId, markId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isValidId(instituteId) && isValidId(markId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantStaff(instituteId)) &&
+          isValidExamMark(incoming(), instituteId, markId) &&
+          incoming().instituteId == existing().instituteId &&
+          incoming().markId == existing().markId &&
+          incoming().examId == existing().examId &&
+          incoming().studentId == existing().studentId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['marksObtained', 'grade', 'enteredByUid', 'updatedAt']);
+        allow delete: if isValidId(instituteId) && isValidId(markId) && (isSuperAdmin() || isTenantAdmin(instituteId));
+      }
+
+      // Subcollection: Study Materials
+      match /studyMaterials/{materialId} {
+        allow get: if isValidId(instituteId) && isValidId(materialId) && (isSuperAdmin() || isTenantMember(instituteId));
+        allow list: if isVerified() && existing().instituteId == instituteId && (isSuperAdmin() || isTenantMember(instituteId));
+        allow create: if isValidId(instituteId) && isValidId(materialId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantStaff(instituteId)) &&
+          isValidStudyMaterial(incoming(), instituteId, materialId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time;
+        allow update: if isValidId(instituteId) && isValidId(materialId) &&
+          isActiveInstitute(instituteId) &&
+          (isSuperAdmin() || isTenantStaff(instituteId)) &&
+          isValidStudyMaterial(incoming(), instituteId, materialId) &&
+          incoming().instituteId == existing().instituteId &&
+          incoming().materialId == existing().materialId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'materialType', 'url', 'updatedAt']);
+        allow delete: if isValidId(instituteId) && isValidId(materialId) && (isSuperAdmin() || isTenantStaff(instituteId));
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "TuitionOS",
+  "description": "All-in-one multi-tenant tuition class, academy, and student management platform tailored for Sri Lanka.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
