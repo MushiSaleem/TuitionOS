@@ -26,9 +26,12 @@ export function AppShell({ children }: AppShellProps) {
     logout,
     exitDemoSandbox,
     resetDemoSandbox,
+    clientConfig,
+    demoSandboxEnabled,
   } = useTuition();
 
-  const isDemo = mode === 'demo_sandbox';
+  const brandName = clientConfig.branding.academyName;
+  const isDemo = demoSandboxEnabled && mode === 'demo_sandbox';
   const role = isDemo ? 'demo' : userProfile?.role;
 
   // Navigation items permitted for the current role (strict isolation)
@@ -86,29 +89,36 @@ export function AppShell({ children }: AppShellProps) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-brand-surface text-brand-body flex flex-col lg:flex-row">
       {/* Desktop Sidebar (256px) */}
       <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:shrink-0 bg-white border-r border-slate-200 sticky top-0 h-screen">
-        <div className="px-6 h-16 flex items-center border-b border-slate-200">
-          <span className="font-display text-lg font-bold tracking-tight text-slate-900">
-            TuitionOS
+        <div className="px-6 h-16 flex items-center gap-2.5 border-b border-slate-200">
+          {clientConfig.branding.logoUrl && (
+            <img
+              src={clientConfig.branding.logoUrl}
+              alt={brandName}
+              className="w-6 h-6 rounded object-contain shrink-0"
+            />
+          )}
+          <span className="font-display text-lg font-bold tracking-tight text-slate-900 truncate">
+            {brandName}
           </span>
         </div>
 
         <div className="px-4 py-4 border-b border-slate-200">
           <div className="flex items-start gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-brand-primary-soft text-brand-primary flex items-center justify-center shrink-0">
               <Building2 className="w-4 h-4" />
             </div>
             <div className="min-w-0">
               <p className="text-xs font-semibold text-slate-900 truncate">
                 {role === 'super_admin'
-                  ? 'TuitionOS Platform'
+                  ? `${brandName} Platform`
                   : activeInstitute?.name || 'Loading Institute...'}
               </p>
               <p className="text-xs text-slate-500 truncate mt-0.5">
                 {isDemo
-                  ? 'Demo Sandbox · Colombo'
+                  ? `Demo Sandbox · ${clientConfig.demo.sandboxCity}`
                   : userProfile?.displayName || userProfile?.email}
               </p>
             </div>
@@ -125,7 +135,7 @@ export function AppShell({ children }: AppShellProps) {
                 onClick={() => setActivePortal(item.id)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
                   active
-                    ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                    ? 'bg-brand-primary-soft text-brand-primary font-semibold'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                 }`}
               >
@@ -137,7 +147,7 @@ export function AppShell({ children }: AppShellProps) {
         </nav>
 
         <div className="p-4 border-t border-slate-200 space-y-2">
-          {isDemo && (
+          {isDemo && clientConfig.demo.allowReset && (
             <button
               type="button"
               onClick={resetDemoSandbox}
@@ -163,7 +173,7 @@ export function AppShell({ children }: AppShellProps) {
         {/* Top Breadcrumb Bar */}
         <header className="sticky top-0 z-20 bg-white border-b border-slate-200 h-14 lg:h-16 px-4 lg:px-8 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-sm min-w-0">
-            <span className="lg:hidden font-display font-bold text-slate-900 shrink-0">TuitionOS</span>
+            <span className="lg:hidden font-display font-bold text-slate-900 shrink-0">{brandName}</span>
             <span className="lg:hidden text-slate-300">/</span>
             <span className="hidden lg:inline text-slate-500 truncate">
               {role === 'super_admin' ? 'Platform' : activeInstitute?.name || 'Institute'}
@@ -176,7 +186,7 @@ export function AppShell({ children }: AppShellProps) {
 
           <div className="flex items-center gap-3 shrink-0">
             {isDemo && (
-              <span className="text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-md whitespace-nowrap">
+              <span className="text-xs font-medium text-brand-primary bg-brand-primary-soft border border-brand-primary px-2.5 py-1 rounded-md whitespace-nowrap">
                 Demo Sandbox
               </span>
             )}
@@ -206,7 +216,7 @@ export function AppShell({ children }: AppShellProps) {
                 type="button"
                 onClick={() => setActivePortal(item.id)}
                 className={`flex flex-col items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold cursor-pointer ${
-                  active ? 'text-indigo-600' : 'text-slate-500'
+                  active ? 'text-brand-primary' : 'text-slate-500'
                 }`}
               >
                 {item.icon}

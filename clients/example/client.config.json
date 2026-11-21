@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "1.0",
+  "clientSlug": "example-academy",
+  "coreVersion": "1.0.0",
+  "isExampleConfig": true,
+  "branding": {
+    "academyName": "Royal Science Academy",
+    "shortName": "Royal Science",
+    "tagline": "Structured G.C.E. A/L & O/L education operations in Kandy.",
+    "description": "Dedicated digital student cards, QR attendance tracking, monthly LKR fee receipts, and exam rank analytics for Royal Science Academy, Kandy.",
+    "logoUrl": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230F766E'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='sans-serif' font-size='16' font-weight='700' fill='%23FFFFFF'%3ER%3C/text%3E%3C/svg%3E",
+    "faviconUrl": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230F766E'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='sans-serif' font-size='16' font-weight='700' fill='%23FFFFFF'%3ER%3C/text%3E%3C/svg%3E",
+    "colors": {
+      "primary": "#0F766E",
+      "primaryHover": "#115E59",
+      "secondary": "#0F172A",
+      "accent": "#D97706",
+      "background": "#F8FAFC",
+      "text": "#0F172A"
+    },
+    "typography": {
+      "displayFont": "'Plus Jakarta Sans', system-ui, -apple-system, sans-serif",
+      "bodyFont": "'DM Sans', system-ui, -apple-system, sans-serif",
+      "monoFont": "'JetBrains Mono', ui-monospace, SFMono-Regular, monospace",
+      "googleFontsUrl": "https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap"
+    }
+  },
+  "contact": {
+    "email": "admin@royalscience-example.lk",
+    "phone": "+94 81 220 4500",
+    "whatsapp": "+94 77 800 4500",
+    "website": "https://royalscience-example.lk",
+    "address": "No. 42 Peradeniya Road, Kandy",
+    "city": "Kandy",
+    "country": "Sri Lanka"
+  },
+  "localization": {
+    "currency": "LKR",
+    "currencySymbol": "Rs.",
+    "locale": "en-LK",
+    "timezone": "Asia/Colombo",
+    "countryCode": "+94"
+  },
+  "modules": {
+    "demoSandboxEnabled": false,
+    "publicOnboardingEnabled": false,
+    "studentPortalEnabled": true,
+    "lecturerPortalEnabled": true,
+    "receptionCounterEnabled": true,
+    "examAnalyticsEnabled": true,
+    "studyMaterialsEnabled": true,
+    "thermalReceiptPrintingEnabled": true
+  },
+  "demo": {
+    "sandboxInstituteName": "Royal Science Academy - Demo",
+    "sandboxCity": "Kandy",
+    "defaultPortal": "dashboard",
+    "allowReset": false
+  },
+  "integrations": {
+    "authProvider": "firebase",
+    "databaseProvider": "firestore",
+    "storageProvider": "firebase-storage",
+    "smsProvider": "notify-lk",
+    "whatsappProvider": "none",
+    "paymentProvider": "payhere"
+  }
+}

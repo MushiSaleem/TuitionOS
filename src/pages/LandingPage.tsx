@@ -19,7 +19,8 @@ interface LandingPageProps {
 }
 
 export function LandingPage({ onNavigateLogin }: LandingPageProps) {
-  const { enterDemoSandbox, submitOnboardingRequest } = useTuition();
+  const { enterDemoSandbox, submitOnboardingRequest, clientConfig, demoSandboxEnabled } = useTuition();
+  const brandName = clientConfig.branding.academyName;
 
   const [instituteName, setInstituteName] = useState('');
   const [city, setCity] = useState('');
@@ -83,22 +84,29 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-8">
           <a
             href="#top"
-            className="font-display text-xl font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0"
+            className="inline-flex items-center gap-2.5 font-display text-xl font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0"
           >
-            TuitionOS
+            {clientConfig.branding.logoUrl && (
+              <img
+                src={clientConfig.branding.logoUrl}
+                alt={brandName}
+                className="w-7 h-7 rounded-md object-contain shrink-0"
+              />
+            )}
+            <span>{brandName}</span>
           </a>
 
           <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-600">
-            <a href="#capabilities" className="hover:text-indigo-600 transition-colors whitespace-nowrap shrink-0">
+            <a href="#capabilities" className="hover:text-brand-primary transition-colors whitespace-nowrap shrink-0">
               Capabilities
             </a>
-            <a href="#modules" className="hover:text-indigo-600 transition-colors whitespace-nowrap shrink-0">
+            <a href="#modules" className="hover:text-brand-primary transition-colors whitespace-nowrap shrink-0">
               Modules
             </a>
-            <a href="#pricing" className="hover:text-indigo-600 transition-colors whitespace-nowrap shrink-0">
+            <a href="#pricing" className="hover:text-brand-primary transition-colors whitespace-nowrap shrink-0">
               Pricing
             </a>
-            <a href="#onboarding" className="hover:text-indigo-600 transition-colors whitespace-nowrap shrink-0">
+            <a href="#onboarding" className="hover:text-brand-primary transition-colors whitespace-nowrap shrink-0">
               Onboarding
             </a>
           </nav>
@@ -107,7 +115,7 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
             <button
               type="button"
               onClick={onNavigateLogin}
-              className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              className="px-4 py-2 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:bg-brand-primary-hover transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
               Sign In
             </button>
@@ -120,30 +128,41 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-stretch">
           <div className="lg:col-span-6 flex flex-col justify-between py-2">
             <div>
-              <p className="text-xs font-semibold tracking-wide text-indigo-600 mb-3">
-                Built for Sri Lankan Tuition Academies · LKR &amp; NIC Ready
+              <p className="text-xs font-semibold tracking-wide text-brand-primary mb-3">
+                Built for Sri Lankan Tuition Academies · {clientConfig.localization.currency} &amp; NIC Ready
               </p>
               <h1
                 className="font-display font-bold tracking-tight text-slate-900 leading-[1.1]"
                 style={{ fontSize: 'clamp(2.25rem, 4vw, 3.5rem)', textWrap: 'balance' }}
               >
-                One operating system for classes, monthly cards, and lecturer splits.
+                {clientConfig.branding.tagline}
               </h1>
               <p className="mt-5 text-base lg:text-lg text-slate-600 leading-relaxed max-w-xl">
-                Replace paper class cards and manual ledger books. TuitionOS gives Sri Lankan tuition
-                institutes instant QR attendance check-ins, 80mm thermal fee receipts in LKR,
+                Replace paper class cards and manual ledger books. {brandName} gives Sri Lankan tuition
+                institutes instant QR attendance check-ins, 80mm thermal fee receipts in {clientConfig.localization.currency},
                 automated lecturer payouts, and O/L &amp; A/L paper rank analytics.
               </p>
 
               <div className="mt-8 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => enterDemoSandbox('dashboard')}
-                  className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  Try Live Demo Sandbox
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+                {demoSandboxEnabled ? (
+                  <button
+                    type="button"
+                    onClick={() => enterDemoSandbox(clientConfig.demo.defaultPortal)}
+                    className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:bg-brand-primary-hover transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    Try Live Demo Sandbox
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onNavigateLogin}
+                    className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:bg-brand-primary-hover transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    Portal Sign In
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                )}
                 <a
                   href="#onboarding"
                   className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
@@ -221,28 +240,30 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
             <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden grid grid-cols-1 md:grid-cols-12">
               <div className="md:col-span-7 p-7 flex flex-col justify-between">
                 <div>
-                  <p className="text-xs font-semibold text-indigo-600 mb-2">01. Reception &amp; Gate Control</p>
+                  <p className="text-xs font-semibold text-brand-primary mb-2">01. Reception &amp; Gate Control</p>
                   <h3 className="font-display text-xl font-bold text-slate-900">
                     Sub-second QR check-in with instant green/red fee alerts
                   </h3>
                   <p className="mt-3 text-sm text-slate-600 leading-relaxed">
-                    Scan a student&apos;s barcode ID or enter STU-2026-1001. TuitionOS marks attendance,
+                    Scan a student&apos;s barcode ID or enter STU-2026-1001. {brandName} marks attendance,
                     plays a distinct chime, and flashes green for paid monthly cards or red with exact
-                    LKR arrears for overdue fees.
+                    {clientConfig.localization.currency} arrears for overdue fees.
                   </p>
                 </div>
                 <div className="mt-6 pt-5 border-t border-slate-200 flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs text-slate-600">
-                    <QrCode className="w-4 h-4 text-indigo-600" />
+                    <QrCode className="w-4 h-4 text-brand-primary" />
                     <span>Printable 80mm thermal receipts &amp; QR cards</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => enterDemoSandbox('counter')}
-                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 whitespace-nowrap cursor-pointer"
-                  >
-                    Open Counter Demo →
-                  </button>
+                  {demoSandboxEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => enterDemoSandbox('counter')}
+                      className="text-xs font-semibold text-brand-primary hover:text-brand-primary-hover whitespace-nowrap cursor-pointer"
+                    >
+                      Open Counter Demo →
+                    </button>
+                  )}
                 </div>
               </div>
               <div className="md:col-span-5 bg-slate-100 min-h-[220px]">
@@ -265,7 +286,7 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
             {/* 1-col card: Lecturer Portal */}
             <div className="bg-white border border-slate-200 rounded-xl p-7 flex flex-col justify-between">
               <div>
-                <p className="text-xs font-semibold text-indigo-600 mb-2">02. Lecturer Portal</p>
+                <p className="text-xs font-semibold text-brand-primary mb-2">02. Lecturer Portal</p>
                 <h3 className="font-display text-xl font-bold text-slate-900">
                   Live payouts, paper marks &amp; tutes
                 </h3>
@@ -285,7 +306,7 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
                       className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0"
                     />
                   ) : (
-                    <div className="w-9 h-9 rounded-full bg-indigo-50 text-indigo-700 flex items-center justify-center text-xs font-bold shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-brand-primary-soft text-brand-primary flex items-center justify-center text-xs font-bold shrink-0">
                       KJ
                     </div>
                   )}
@@ -294,20 +315,22 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
                     <p className="text-xs text-slate-500 truncate">2026 A/L Physics · 70% Split</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => enterDemoSandbox('lecturer')}
-                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  Preview →
-                </button>
+                {demoSandboxEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => enterDemoSandbox('lecturer')}
+                    className="text-xs font-semibold text-brand-primary hover:text-brand-primary-hover whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    Preview →
+                  </button>
+                )}
               </div>
             </div>
 
             {/* Bottom row: 03 & 04 */}
             <div className="bg-white border border-slate-200 rounded-xl p-7 flex flex-col justify-between">
               <div>
-                <p className="text-xs font-semibold text-indigo-600 mb-2">03. Monthly Card Engine</p>
+                <p className="text-xs font-semibold text-brand-primary mb-2">03. Monthly Card Engine</p>
                 <h3 className="font-display text-xl font-bold text-slate-900">
                   Full, half &amp; free cards without chaos
                 </h3>
@@ -325,7 +348,7 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
             <div id="modules" className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-7 flex flex-col justify-between">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <p className="text-xs font-semibold text-indigo-600 mb-2">04. Student &amp; Parent Portal</p>
+                  <p className="text-xs font-semibold text-brand-primary mb-2">04. Student &amp; Parent Portal</p>
                   <h3 className="font-display text-xl font-bold text-slate-900">
                     Mobile-first QR ID, attendance &amp; rank trends
                   </h3>
@@ -348,13 +371,15 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
                   </div>
                   <div className="flex items-center justify-between pt-3 border-t border-slate-200">
                     <span className="text-xs font-semibold text-emerald-700">Nov 2026 · Paid</span>
-                    <button
-                      type="button"
-                      onClick={() => enterDemoSandbox('student')}
-                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer"
-                    >
-                      View Student Portal →
-                    </button>
+                    {demoSandboxEnabled && (
+                      <button
+                        type="button"
+                        onClick={() => enterDemoSandbox('student')}
+                        className="text-xs font-semibold text-brand-primary hover:text-brand-primary-hover cursor-pointer"
+                      >
+                        View Student Portal →
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -382,7 +407,7 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
                 <div
                   key={tierKey}
                   className={`rounded-xl p-7 flex flex-col justify-between bg-white border ${
-                    isFeatured ? 'border-indigo-600 ring-1 ring-indigo-600' : 'border-slate-200'
+                    isFeatured ? 'border-brand-primary ring-1 ring-brand-primary' : 'border-slate-200'
                   }`}
                 >
                   <div>
@@ -415,8 +440,8 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
                     onClick={() => setPreferredTier(tierKey)}
                     className={`mt-7 w-full py-2.5 px-4 rounded-lg text-sm font-semibold text-center transition-colors ${
                       isFeatured
-                        ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                        : 'bg-slate-900 text-white hover:bg-slate-800'
+                        ? 'bg-brand-primary text-white hover:bg-brand-primary-hover'
+                        : 'bg-brand-secondary text-white hover:bg-slate-800'
                     }`}
                   >
                     Select {plan.name}
@@ -459,17 +484,20 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
                   Onboarding request received
                 </h3>
                 <p className="mt-2 text-sm text-slate-600 max-w-md mx-auto">
-                  Your institute application has been logged for review. While you wait, explore the
-                  full Apex Academy sandbox environment.
+                  {demoSandboxEnabled
+                    ? `Your institute application has been logged for review. While you wait, explore the full ${clientConfig.demo.sandboxInstituteName} sandbox environment.`
+                    : 'Your institute application has been logged for review. Our onboarding team will contact you shortly.'}
                 </p>
                 <div className="mt-6 flex items-center justify-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => enterDemoSandbox('dashboard')}
-                    className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 cursor-pointer"
-                  >
-                    Try Live Demo Sandbox
-                  </button>
+                  {demoSandboxEnabled && (
+                    <button
+                      type="button"
+                      onClick={() => enterDemoSandbox(clientConfig.demo.defaultPortal)}
+                      className="px-4 py-2 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:bg-brand-primary-hover cursor-pointer"
+                    >
+                      Try Live Demo Sandbox
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setSubmittedSuccess(false)}
@@ -606,7 +634,7 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full py-3 px-5 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors cursor-pointer"
+                  className="w-full py-3 px-5 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:bg-brand-primary-hover disabled:opacity-60 transition-colors cursor-pointer"
                 >
                   {submitting ? 'Submitting Application...' : 'Submit Onboarding Request'}
                 </button>
@@ -619,7 +647,9 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
       {/* Quiet Footer */}
       <footer className="bg-white border-t border-slate-200 py-8">
         <div className="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <p className="font-display font-semibold text-slate-800">TuitionOS · Sri Lanka</p>
+          <p className="font-display font-semibold text-slate-800">
+            {brandName} · {clientConfig.contact.country}
+          </p>
           <div className="flex items-center gap-6">
             <a href="#capabilities" className="hover:text-slate-900">Capabilities</a>
             <a href="#pricing" className="hover:text-slate-900">Pricing</a>
@@ -627,7 +657,7 @@ export function LandingPage({ onNavigateLogin }: LandingPageProps) {
               Portal Sign In
             </button>
           </div>
-          <p>© 2026 TuitionOS. Multi-tenant education operations.</p>
+          <p>© 2026 {brandName}. Multi-tenant education operations.</p>
         </div>
       </footer>
     </div>

@@ -1,11 +1,45 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+import { initializeApp, type FirebaseApp } from 'firebase/app';
+import { getAuth, GoogleAuthProvider, type Auth } from 'firebase/auth';
+import { doc, getDocFromServer, getFirestore, type Firestore } from 'firebase/firestore';
+import { devFirebaseFallback } from 'virtual:tuitionos-dev-firebase-fallback';
+import {
+  resolveFirebaseConfig,
+  type FirebaseConfigSource,
+} from '@/src/config/firebaseConfig';
 
-const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const auth = getAuth(app);
+let appInstance: FirebaseApp | null = null;
+let dbInstance: Firestore | null = null;
+let authInstance: Auth | null = null;
+let initError: Error | null = null;
+let configSource: FirebaseConfigSource | null = null;
+
+try {
+  const resolved = resolveFirebaseConfig(import.meta.env, {
+    isDev: import.meta.env.DEV,
+    devFallbackConfig: import.meta.env.DEV ? devFirebaseFallback : null,
+  });
+
+  configSource = resolved.source;
+  if (import.meta.env.DEV && resolved.source === 'dev-transition-fallback') {
+    console.warn(
+      '[TuitionOS] Using development-only Firebase transition fallback. Configure VITE_FIREBASE_* environment variables for production deployments.'
+    );
+  }
+
+  appInstance = initializeApp(resolved.config);
+  dbInstance = resolved.config.firestoreDatabaseId
+    ? getFirestore(appInstance, resolved.config.firestoreDatabaseId)
+    : getFirestore(appInstance);
+  authInstance = getAuth(appInstance);
+} catch (error) {
+  initError = error instanceof Error ? error : new Error(String(error));
+  console.error('[TuitionOS] Firebase initialization failed:', initError.message);
+}
+
+export const firebaseInitError = initError;
+export const firebaseConfigSource = configSource;
+export const db = dbInstance as Firestore;
+export const auth = authInstance as Auth;
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
@@ -43,13 +77,13 @@ export function handleFirestoreError(
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
+      userId: authInstance?.currentUser?.uid,
+      email: authInstance?.currentUser?.email,
+      emailVerified: authInstance?.currentUser?.emailVerified,
+      isAnonymous: authInstance?.currentUser?.isAnonymous,
+      tenantId: authInstance?.currentUser?.tenantId,
       providerInfo:
-        auth.currentUser?.providerData?.map((provider) => ({
+        authInstance?.currentUser?.providerData?.map((provider) => ({
           providerId: provider.providerId,
           email: provider.email,
         })) || [],
@@ -62,8 +96,9 @@ export function handleFirestoreError(
 }
 
 async function testConnection() {
+  if (!dbInstance) return;
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
+    await getDocFromServer(doc(dbInstance, 'test', 'connection'));
   } catch (error) {
     if (error instanceof Error && error.message.includes('the client is offline')) {
       console.error('Please check your Firebase configuration.');

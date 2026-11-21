@@ -16,9 +16,13 @@ export function LoginPage({ onBackHome }: LoginPageProps) {
     authError,
     userProfile,
     firebaseUser,
+    clientConfig,
+    demoSandboxEnabled,
   } = useTuition();
 
+  const brandName = clientConfig.branding.academyName;
   const [tab, setTab] = useState<'staff' | 'student'>('staff');
+  const activeTab = demoSandboxEnabled ? tab : 'staff';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -62,7 +66,7 @@ export function LoginPage({ onBackHome }: LoginPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col justify-center px-4 py-10">
+    <div className="min-h-screen bg-brand-surface flex flex-col justify-center px-4 py-10">
       <div className="max-w-md w-full mx-auto">
         <button
           type="button"
@@ -70,46 +74,48 @@ export function LoginPage({ onBackHome }: LoginPageProps) {
           className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 mb-6 cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to TuitionOS
+          Back to {brandName}
         </button>
 
         <div className="bg-white border border-slate-200 rounded-xl p-8">
           <div className="mb-6">
             <h1 className="font-display text-2xl font-bold text-slate-900 tracking-tight">
-              Sign in to TuitionOS
+              Sign in to {brandName}
             </h1>
             <p className="mt-1.5 text-sm text-slate-600">
               Your workspace and institute access are loaded automatically after verification.
             </p>
           </div>
 
-          {/* Segmented Tab */}
-          <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-lg mb-6">
-            <button
-              type="button"
-              onClick={() => setTab('staff')}
-              className={`py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap cursor-pointer ${
-                tab === 'staff'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Institute &amp; Staff
-            </button>
-            <button
-              type="button"
-              onClick={() => setTab('student')}
-              className={`py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap cursor-pointer ${
-                tab === 'student'
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Student / Parent Portal
-            </button>
-          </div>
+          {/* Segmented Tab (Student demo login tab only shown when demo sandbox is enabled) */}
+          {demoSandboxEnabled && (
+            <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 rounded-lg mb-6">
+              <button
+                type="button"
+                onClick={() => setTab('staff')}
+                className={`py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                  activeTab === 'staff'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Institute &amp; Staff
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab('student')}
+                className={`py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                  activeTab === 'student'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Student / Parent Portal
+              </button>
+            </div>
+          )}
 
-          {tab === 'staff' ? (
+          {activeTab === 'staff' ? (
             <div className="space-y-5">
               <button
                 type="button"
@@ -214,20 +220,22 @@ export function LoginPage({ onBackHome }: LoginPageProps) {
                     >
                       Sign out ({firebaseUser.email})
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => enterDemoSandbox('dashboard')}
-                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer"
-                    >
-                      Try Live Demo Sandbox →
-                    </button>
+                    {demoSandboxEnabled && (
+                      <button
+                        type="button"
+                        onClick={() => enterDemoSandbox(clientConfig.demo.defaultPortal)}
+                        className="text-xs font-semibold text-brand-primary hover:text-brand-primary-hover cursor-pointer"
+                      >
+                        Try Live Demo Sandbox →
+                      </button>
+                    )}
                   </div>
                 )}
 
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors cursor-pointer"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 px-4 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:bg-brand-primary-hover disabled:opacity-60 transition-colors cursor-pointer"
                 >
                   <Lock className="w-4 h-4" />
                   {submitting
@@ -242,7 +250,7 @@ export function LoginPage({ onBackHome }: LoginPageProps) {
                 <button
                   type="button"
                   onClick={() => setIsSignUp(!isSignUp)}
-                  className="text-xs font-medium text-indigo-600 hover:text-indigo-700 cursor-pointer"
+                  className="text-xs font-medium text-brand-primary hover:text-brand-primary-hover cursor-pointer"
                 >
                   {isSignUp
                     ? 'Already have an account? Sign In'
@@ -253,7 +261,7 @@ export function LoginPage({ onBackHome }: LoginPageProps) {
           ) : (
             <form onSubmit={handleStudentSubmit} className="space-y-4">
               <div className="flex items-start gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-600">
-                <QrCode className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
+                <QrCode className="w-4 h-4 text-brand-primary shrink-0 mt-0.5" />
                 <span>
                   Enter the Student ID printed on your class card along with your 4-digit portal PIN
                   or registered parent mobile number.
@@ -296,7 +304,7 @@ export function LoginPage({ onBackHome }: LoginPageProps) {
 
               <button
                 type="submit"
-                className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors cursor-pointer"
+                className="w-full py-2.5 px-4 text-sm font-semibold text-white bg-brand-primary rounded-lg hover:bg-brand-primary-hover transition-colors cursor-pointer"
               >
                 Open Student Portal
               </button>

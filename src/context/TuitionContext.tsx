@@ -21,7 +21,15 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore';
-import { OperationType, auth, db, googleProvider, handleFirestoreError } from '@/src/lib/firebase';
+import {
+  OperationType,
+  auth,
+  db,
+  firebaseInitError,
+  googleProvider,
+  handleFirestoreError,
+} from '@/src/lib/firebase';
+import { ClientConfig, getActiveClientConfig } from '@/src/config/clientConfig';
 import {
   AttendanceRecord,
   AuditLog,
@@ -58,6 +66,8 @@ export type PortalView = 'super_admin' | 'dashboard' | 'counter' | 'lecturer' | 
 const SUPER_ADMIN_EMAIL = 'apekollek@gmail.com';
 
 interface TuitionContextValue {
+  clientConfig: ClientConfig;
+  demoSandboxEnabled: boolean;
   mode: AppMode;
   authReady: boolean;
   firebaseUser: User | null;
@@ -153,6 +163,9 @@ interface TuitionContextValue {
 const TuitionContext = createContext<TuitionContextValue | null>(null);
 
 export function TuitionProvider({ children }: { children: React.ReactNode }) {
+  const clientConfig = useMemo(() => getActiveClientConfig(), []);
+  const demoSandboxEnabled = clientConfig.modules.demoSandboxEnabled;
+
   const [mode, setMode] = useState<AppMode>('public');
   const [authReady, setAuthReady] = useState(false);
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
@@ -160,7 +173,7 @@ export function TuitionProvider({ children }: { children: React.ReactNode }) {
   const [authError, setAuthError] = useState<string | null>(null);
   const [activePortal, setActivePortal] = useState<PortalView>('dashboard');
 
-  // Demo Sandbox State
+  // Demo Sandbox State (accessible only when clientConfig.modules.demoSandboxEnabled is true)
   const [demoData, setDemoData] = useState(() => createDemoSeedState(DEMO_INSTITUTE_ID));
   const [demoStudentId, setDemoStudentId] = useState<string>('stu-1001');
   const [demoLecturerId, setDemoLecturerId] = useState<string>('stf-chathura');
@@ -199,12 +212,19 @@ export function TuitionProvider({ children }: { children: React.ReactNode }) {
 
   // Auth listener & UserProfile resolution
   useEffect(() => {
+    if (firebaseInitError || !auth) {
+      setAuthReady(true);
+      return;
+    }
+
     const unsub = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       setAuthError(null);
       if (!user) {
         setUserProfile(null);
-        setMode((prev) => (prev === 'demo_sandbox' ? 'demo_sandbox' : 'public'));
+        setMode((prev) =>
+          demoSandboxEnabled && prev === 'demo_sandbox' ? 'demo_sandbox' : 'public'
+        );
         setAuthReady(true);
         return;
       }
@@ -279,18 +299,20 @@ export function TuitionProvider({ children }: { children: React.ReactNode }) {
         setUserProfile(null);
         setMode('live_firebase');
         setAuthError(
-          'Your account is verified, but it is not yet assigned to a TuitionOS institute. Ask your Institute Admin or Super Admin to invite your email, or explore the Live Demo Sandbox.'
+          demoSandboxEnabled
+            ? `Your account is verified, but it is not yet assigned to a ${clientConfig.branding.academyName} institute. Ask your Institute Admin or Super Admin to invite your email, or explore the Live Demo Sandbox.`
+            : `Your account is verified, but it is not yet assigned to ${clientConfig.branding.academyName}. Ask your Institute Admin to invite your email.`
         );
       } catch (err) {
         console.error('Auth profile resolution error:', err);
-        setAuthError('Unable to verify your TuitionOS profile. Please try again.');
+        setAuthError(`Unable to verify your ${clientConfig.branding.academyName} profile. Please try again.`);
       } finally {
         setAuthReady(true);
       }
     });
 
     return () => unsub();
-  }, []);
+  }, [clientConfig.branding.academyName, demoSandboxEnabled]);
 
   // Firestore Realtime Listeners (Strictly Tenant-Scoped or Super-Admin-Scoped)
   useEffect(() => {
@@ -478,29 +500,48 @@ export function TuitionProvider({ children }: { children: React.ReactNode }) {
     setUserProfile(null);
   }, [mode]);
 
-  const enterDemoSandbox = useCallback((initialPortal: PortalView = 'dashboard') => {
-    setMode('demo_sandbox');
-    setAuthError(null);
-    setActivePortal(initialPortal === 'super_admin' ? 'dashboard' : initialPortal);
-  }, []);
+  const enterDemoSandbox = useCallback(
+    (initialPortal: PortalView = 'dashboard') => {
+      if (!demoSandboxEnabled) {
+        console.warn('[TuitionOS] Demo sandbox is disabled in the active client configuration.');
+        return;
+      }
+      setMode('demo_sandbox');
+      setAuthError(null);
+      setActivePortal(initialPortal === 'super_admin' ? 'dashboard' : initialPortal);
+    },
+    [demoSandboxEnabled]
+  );
 
   const exitDemoSandbox = useCallback(() => {
     setMode(firebaseUser && userProfile ? 'live_firebase' : 'public');
   }, [firebaseUser, userProfile]);
 
   const resetDemoSandbox = useCallback(() => {
+    if (!demoSandboxEnabled || !clientConfig.demo.allowReset) {
+      return;
+    }
     setDemoData(createDemoSeedState(DEMO_INSTITUTE_ID));
     setDemoStudentId('stu-1001');
     setDemoLecturerId('stf-chathura');
-  }, []);
+  }, [clientConfig.demo.allowReset, demoSandboxEnabled]);
 
   const loginDemoStudent = useCallback(
     (studentCode: string, pinOrPhone: string) => {
+      if (!demoSandboxEnabled) {
+        return {
+          ok: false,
+          error: 'Demo student sandbox login is disabled for this deployment.',
+        };
+      }
       const normalizedCode = studentCode.trim().toUpperCase();
       const cleanedAuth = pinOrPhone.replace(/\D/g, '');
       const found = demoData.students.find((s) => s.studentCode.toUpperCase() === normalizedCode);
       if (!found) {
-        return { ok: false, error: 'Student ID not found in Apex Academy - Colombo.' };
+        return {
+          ok: false,
+          error: `Student ID not found in ${clientConfig.demo.sandboxInstituteName}.`,
+        };
       }
       const phoneDigits = found.phone.replace(/\D/g, '');
       const parentDigits = found.parentPhone.replace(/\D/g, '');
@@ -518,7 +559,7 @@ export function TuitionProvider({ children }: { children: React.ReactNode }) {
       setActivePortal('student');
       return { ok: true, student: found };
     },
-    [demoData.students]
+    [clientConfig.demo.sandboxInstituteName, demoData.students, demoSandboxEnabled]
   );
 
   // Public Onboarding Submission
@@ -1214,9 +1255,13 @@ export function TuitionProvider({ children }: { children: React.ReactNode }) {
     [mode, activeInstituteId]
   );
 
+  const isDemoActive = demoSandboxEnabled && mode === 'demo_sandbox';
+
   const value = useMemo<TuitionContextValue>(
     () => ({
-      mode,
+      clientConfig,
+      demoSandboxEnabled,
+      mode: isDemoActive ? 'demo_sandbox' : mode === 'demo_sandbox' ? 'public' : mode,
       authReady,
       firebaseUser,
       userProfile,
@@ -1228,16 +1273,16 @@ export function TuitionProvider({ children }: { children: React.ReactNode }) {
       demoLecturerId,
       setDemoLecturerId,
 
-      activeInstitute: mode === 'demo_sandbox' ? demoData.institute : liveInstitute,
-      staff: mode === 'demo_sandbox' ? demoData.staff : liveStaff,
-      classes: mode === 'demo_sandbox' ? demoData.classes : liveClasses,
-      batches: mode === 'demo_sandbox' ? demoData.batches : liveBatches,
-      students: mode === 'demo_sandbox' ? demoData.students : liveStudents,
-      feePayments: mode === 'demo_sandbox' ? demoData.feePayments : livePayments,
-      attendance: mode === 'demo_sandbox' ? demoData.attendance : liveAttendance,
-      exams: mode === 'demo_sandbox' ? demoData.exams : liveExams,
-      examMarks: mode === 'demo_sandbox' ? demoData.examMarks : liveExamMarks,
-      studyMaterials: mode === 'demo_sandbox' ? demoData.studyMaterials : liveMaterials,
+      activeInstitute: isDemoActive ? demoData.institute : liveInstitute,
+      staff: isDemoActive ? demoData.staff : liveStaff,
+      classes: isDemoActive ? demoData.classes : liveClasses,
+      batches: isDemoActive ? demoData.batches : liveBatches,
+      students: isDemoActive ? demoData.students : liveStudents,
+      feePayments: isDemoActive ? demoData.feePayments : livePayments,
+      attendance: isDemoActive ? demoData.attendance : liveAttendance,
+      exams: isDemoActive ? demoData.exams : liveExams,
+      examMarks: isDemoActive ? demoData.examMarks : liveExamMarks,
+      studyMaterials: isDemoActive ? demoData.studyMaterials : liveMaterials,
 
       allInstitutes,
       onboardingRequests,
@@ -1271,6 +1316,9 @@ export function TuitionProvider({ children }: { children: React.ReactNode }) {
       deleteStudyMaterial,
     }),
     [
+      clientConfig,
+      demoSandboxEnabled,
+      isDemoActive,
       mode,
       authReady,
       firebaseUser,
