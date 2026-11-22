@@ -11,6 +11,11 @@ import {
   type ClientConfig,
 } from './src/config/clientConfig';
 import { resolveFirebaseConfig } from './src/config/firebaseConfig';
+import {
+  assertPublicSupabaseKey,
+  resolveBackendProvider,
+  resolveSupabaseConfig,
+} from './src/config/supabaseConfig';
 
 const DEV_FIREBASE_FALLBACK_VIRTUAL_ID = 'virtual:tuitionos-dev-firebase-fallback';
 const RESOLVED_DEV_FIREBASE_FALLBACK_ID = '\0' + DEV_FIREBASE_FALLBACK_VIRTUAL_ID;
@@ -169,9 +174,20 @@ export default defineConfig(({ command, mode }) => {
 
   const activeClientConfig = loadActiveClientConfig(env, isProductionBuild);
 
-  // Optional strict build-time check for production CI pipelines
+  // Always reject any service-role key accidentally placed in VITE_SUPABASE_ANON_KEY
+  if (typeof env.VITE_SUPABASE_ANON_KEY === 'string' && env.VITE_SUPABASE_ANON_KEY.trim()) {
+    assertPublicSupabaseKey(env.VITE_SUPABASE_ANON_KEY, 'VITE_SUPABASE_ANON_KEY');
+  }
+
+  // Validate backend provider selector if provided (defaults to 'firebase')
+  const backendProvider = resolveBackendProvider(env);
+
+  // Optional strict build-time checks for production CI pipelines
   if (isProductionBuild && env.STRICT_FIREBASE_ENV === 'true') {
     resolveFirebaseConfig(env, { isDev: false, devFallbackConfig: null });
+  }
+  if (isProductionBuild && (env.STRICT_SUPABASE_ENV === 'true' || backendProvider === 'supabase')) {
+    resolveSupabaseConfig(env);
   }
 
   return {

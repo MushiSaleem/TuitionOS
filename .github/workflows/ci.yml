@@ -1,0 +1,77 @@
+name: TuitionOS CI & Database Security Verification
+
+on:
+  pull_request:
+    branches: ['main']
+  push:
+    branches: ['main']
+  workflow_dispatch:
+
+jobs:
+  frontend-unit-and-bundle-checks:
+    name: Type-check, Bun Tests & Bundle Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Type-check application (tsc --noEmit)
+        run: bun run lint
+
+      - name: Run Bun unit & embedded PostgreSQL RLS tests
+        run: bun test
+
+      - name: Build production bundle (Firebase default compatibility — zero Supabase env vars)
+        run: bun run build
+
+      - name: Scan production bundle for forbidden secrets or dev leaks
+        run: bun run check:bundle-secrets
+
+  postgres-rls-security-suite:
+    name: PostgreSQL 16 Fresh Migrations & RLS Security Suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres_ci_test_password
+          POSTGRES_DB: tuitionos_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Bootstrap Supabase Auth test shim
+        env:
+          PGPASSWORD: postgres_ci_test_password
+        run: psql -h 127.0.0.1 -U postgres -d tuitionos_test -v ON_ERROR_STOP=1 -f supabase/tests/a2_1_supabase_auth_shim.sql
+
+      - name: Apply all Supabase migrations in order
+        env:
+          PGPASSWORD: postgres_ci_test_password
+        run: |
+          for migration in supabase/migrations/*.sql; do
+            echo "Applying $migration..."
+            psql -h 127.0.0.1 -U postgres -d tuitionos_test -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Execute Stage A2.1 SQL RLS & Tenant Isolation Security Suite
+        env:
+          PGPASSWORD: postgres_ci_test_password
+        run: psql -h 127.0.0.1 -U postgres -d tuitionos_test -v ON_ERROR_STOP=1 -f supabase/tests/a2_1_foundation_rls.sql

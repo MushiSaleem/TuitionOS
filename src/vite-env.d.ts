@@ -13,6 +13,9 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_MEASUREMENT_ID?: string;
   readonly VITE_ALLOW_DEV_FIREBASE_FALLBACK?: string;
   readonly VITE_DEMO_SANDBOX_ENABLED?: string;
+  readonly VITE_BACKEND_PROVIDER?: string;
+  readonly VITE_SUPABASE_URL?: string;
+  readonly VITE_SUPABASE_ANON_KEY?: string;
 }
 
 interface ImportMeta {

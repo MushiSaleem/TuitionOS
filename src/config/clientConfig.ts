@@ -1,9 +1,13 @@
 export type DemoPortalId = 'dashboard' | 'counter' | 'lecturer' | 'student';
 
-export type StorageProvider = 'firebase-storage' | 'cloudflare-r2' | 'none';
+export type AuthProvider = 'firebase' | 'supabase';
+export type DatabaseProvider = 'firestore' | 'supabase-postgres';
+export type StorageProvider = 'firebase-storage' | 'supabase-storage' | 'cloudflare-r2' | 'none';
 export type SmsProvider = 'none' | 'notify-lk' | 'dialog-esms' | 'twilio';
 export type WhatsappProvider = 'none' | 'meta-cloud-api' | 'twilio';
 export type PaymentProvider = 'none' | 'payhere' | 'webxpay' | 'stripe';
+export type VideoProvider = 'none' | 'bunny-stream' | 'cloudflare-stream' | 'mux' | 'external-embed';
+export type LiveClassProvider = 'none' | 'google-meet' | 'zoom' | 'google-meet-and-zoom';
 
 export interface ClientBrandingColors {
   primary: string;
@@ -69,12 +73,14 @@ export interface ClientDemoConfig {
 }
 
 export interface ClientIntegrations {
-  authProvider: 'firebase';
-  databaseProvider: 'firestore';
+  authProvider: AuthProvider;
+  databaseProvider: DatabaseProvider;
   storageProvider: StorageProvider;
   smsProvider: SmsProvider;
   whatsappProvider: WhatsappProvider;
   paymentProvider: PaymentProvider;
+  videoProvider?: VideoProvider;
+  liveClassProvider?: LiveClassProvider;
 }
 
 export interface ClientConfig {
@@ -107,10 +113,14 @@ const HEX_COLOR_REGEX = /^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CURRENCY_REGEX = /^[A-Z]{3}$/;
 const DEMO_PORTALS: readonly DemoPortalId[] = ['dashboard', 'counter', 'lecturer', 'student'];
-const STORAGE_PROVIDERS: readonly StorageProvider[] = ['firebase-storage', 'cloudflare-r2', 'none'];
+const AUTH_PROVIDERS: readonly AuthProvider[] = ['firebase', 'supabase'];
+const DATABASE_PROVIDERS: readonly DatabaseProvider[] = ['firestore', 'supabase-postgres'];
+const STORAGE_PROVIDERS: readonly StorageProvider[] = ['firebase-storage', 'supabase-storage', 'cloudflare-r2', 'none'];
 const SMS_PROVIDERS: readonly SmsProvider[] = ['none', 'notify-lk', 'dialog-esms', 'twilio'];
 const WHATSAPP_PROVIDERS: readonly WhatsappProvider[] = ['none', 'meta-cloud-api', 'twilio'];
 const PAYMENT_PROVIDERS: readonly PaymentProvider[] = ['none', 'payhere', 'webxpay', 'stripe'];
+const VIDEO_PROVIDERS: readonly VideoProvider[] = ['none', 'bunny-stream', 'cloudflare-stream', 'mux', 'external-embed'];
+const LIVE_CLASS_PROVIDERS: readonly LiveClassProvider[] = ['none', 'google-meet', 'zoom', 'google-meet-and-zoom'];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -470,13 +480,28 @@ export function validateClientConfig(input: unknown, sourceLabel = 'client confi
   if (!isRecord(integrationsRaw)) {
     issues.push('integrations: must be an object');
   } else {
+    const videoProvider =
+      integrationsRaw.videoProvider !== undefined
+        ? readEnum(integrationsRaw, 'videoProvider', 'integrations.videoProvider', VIDEO_PROVIDERS, issues)
+        : undefined;
+    const liveClassProvider =
+      integrationsRaw.liveClassProvider !== undefined
+        ? readEnum(
+            integrationsRaw,
+            'liveClassProvider',
+            'integrations.liveClassProvider',
+            LIVE_CLASS_PROVIDERS,
+            issues
+          )
+        : undefined;
+
     integrations = {
-      authProvider: readEnum(integrationsRaw, 'authProvider', 'integrations.authProvider', ['firebase'] as const, issues),
+      authProvider: readEnum(integrationsRaw, 'authProvider', 'integrations.authProvider', AUTH_PROVIDERS, issues),
       databaseProvider: readEnum(
         integrationsRaw,
         'databaseProvider',
         'integrations.databaseProvider',
-        ['firestore'] as const,
+        DATABASE_PROVIDERS,
         issues
       ),
       storageProvider: readEnum(
@@ -501,6 +526,8 @@ export function validateClientConfig(input: unknown, sourceLabel = 'client confi
         PAYMENT_PROVIDERS,
         issues
       ),
+      ...(videoProvider !== undefined ? { videoProvider } : {}),
+      ...(liveClassProvider !== undefined ? { liveClassProvider } : {}),
     };
   }
 
